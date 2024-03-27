@@ -1,7 +1,10 @@
 #pragma once
 
 #include "singleton.h"
+#include <charconv>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <sys/uio.h>
@@ -13,11 +16,49 @@ public:
 	pid_t pid = 0;
 
 public:
-	// TODO: add GetBaseAddres(), GetPid()
-
 	bool IsReady()
 	{
 		return pid != 0;
+	}
+
+	pid_t GetPid(std::string processName)
+	{
+		if (IsReady()) return pid;
+
+		for (const auto& Entry : std::filesystem::directory_iterator("/proc"))
+		{
+			if (!Entry.is_directory()) continue;
+
+			std::ifstream CommandFile(std::string(Entry.path()) + "/cmdline");
+			std::string CommandLine;
+			std::getline(CommandFile, CommandLine);
+
+			if (CommandLine.find(processName) != std::string::npos)
+			{
+				pid = std::stoi(Entry.path().filename());
+				break;
+			}
+		}
+		return pid;
+	}
+
+	uintptr_t GetBaseAddress()
+	{
+		if (!IsReady()) return 0x00;
+
+		std::string mapsPath = "/proc/" + std::to_string(pid) + "/maps";
+
+		std::ifstream mapsFile(mapsPath);
+		if (!mapsFile.is_open()) return 0x00;
+
+		std::string line;
+		if (!std::getline(mapsFile, line)) return 0x00;
+
+		uintptr_t address = 0;
+		auto result = std::from_chars(line.data(), line.data() + line.size(), address, 16);
+		if (result.ec != std::errc()) return 0x00;
+
+		return address;
 	}
 
 	template<typename T>
