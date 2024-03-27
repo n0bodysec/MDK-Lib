@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 3.12)
-project(SDKTest)
-
 set(PROJECT_NAME SDKTest)
+project(${PROJECT_NAME})
 
-# Set C++ standard to C++23
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -23,16 +22,16 @@ set(HEADERS
 # Add executable
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
+# Include directories
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 # Compiler options
 target_compile_options(${PROJECT_NAME} PRIVATE
     -Wall
     -Wextra
     -Wpedantic
-)
-
-# Include directories
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Add definitions
