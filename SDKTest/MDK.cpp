@@ -34,12 +34,11 @@ MDKBase::~MDKBase()
 
 MDKHandler::MDKHandler()
 {
-    puts("starting MDKHandler... Thank for choosing us!");
+
 }
 
 void MDKHandler::newFrame()
 {
-    puts("pushing a new frame...");
     const auto currentTime = std::chrono::high_resolution_clock::now();
 
     // Convert the time point to nanoseconds since the epoch
