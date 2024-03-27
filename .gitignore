@@ -47,5 +47,4 @@ _deps
 
 #
 build
-.vscode
-SDKTest
+SDKTest/SDKTest
