@@ -1,7 +1,9 @@
 // ReSharper disable CppCStyleCast
 #pragma once
-#include <unordered_map>
+
 #include "Memory.h"
+#include <string.h>
+#include <unordered_map>
 
 // whether the entire caching system should be used or not.
 // the cache feature is very powerful, however if you are sure you are good enough
@@ -201,7 +203,9 @@ class MDKHandler
 			if (base.lastCacheTS >= currentFrameTS)
 			{
 				//keep old data and only read additional bytes
-				Memory::read(base.basePointer + oldUpperBound + base.block.lowerBound, reinterpret_cast<uint64_t>(base.block.blockPointer) + oldUpperBound + base.block.lowerBound, base.block.upperBound - oldUpperBound - base.block.lowerBound);
+				Memory::Get().Read(base.basePointer + oldUpperBound + base.block.lowerBound,
+								   reinterpret_cast<void*>(reinterpret_cast<uint64_t>(base.block.blockPointer) + oldUpperBound + base.block.lowerBound),
+								   static_cast<size_t>(base.block.upperBound - oldUpperBound - base.block.lowerBound));
 				base.lastCacheTS = currentFrameTS;
 				return true;
 			}
@@ -214,7 +218,9 @@ class MDKHandler
 			if (base.lastCacheTS >= currentFrameTS)
 			{
 				//keep old data and only read additional bytes
-				Memory::read(base.basePointer + base.block.lowerBound, reinterpret_cast<uint64_t>(base.block.blockPointer) + base.block.lowerBound, oldLowerBound - base.block.lowerBound);
+				Memory::Get().Read(base.basePointer + base.block.lowerBound,
+								   reinterpret_cast<void*>(reinterpret_cast<uint64_t>(base.block.blockPointer) + base.block.lowerBound),
+								   static_cast<size_t>(oldLowerBound - base.block.lowerBound));
 
 				base.lastCacheTS = currentFrameTS;
 				return true;
@@ -223,7 +229,9 @@ class MDKHandler
 		//reread entire block
 		if (base.lastCacheTS < currentFrameTS)
 		{
-			Memory::read(base.basePointer + base.block.lowerBound, reinterpret_cast<uint64_t>(base.block.blockPointer) + base.block.lowerBound, base.block.upperBound - base.block.lowerBound);
+			Memory::Get().Read(base.basePointer + base.block.lowerBound,
+							   reinterpret_cast<void*>(reinterpret_cast<uint64_t>(base.block.blockPointer) + base.block.lowerBound),
+							   static_cast<size_t>(base.block.upperBound - base.block.lowerBound));
 			base.lastCacheTS = currentFrameTS;
 		}
 		return true;
@@ -301,7 +309,7 @@ public:
 	/// \param cache whether this object should be cached or deleted once not needed anymore
 	/// \return the class with data upon success
 	template< typename T, typename X = MDKBase>
-	static T get(DWORD64 gamePointer, bool cache = true)
+	static T get(uintptr_t gamePointer, bool cache = true)
 	{
 		return get<T, X>((void*)gamePointer, cache);
 	}
@@ -361,7 +369,7 @@ public:
 		T res;
 		memset(&res, 0, sizeof(T));
 
-		Memory::read(up + info.offset, (uint64_t)&res, sizeof(T));
+		Memory::Get().Read(up + info.offset, (uint64_t)&res, sizeof(T));
 
 		if (info.isBit)
 		{
@@ -405,7 +413,7 @@ public:
 			//change to our cooked bitfield
 			addr = reinterpret_cast<uint64_t>(&c);
 		}
-		Memory::write(instance.basePointer + instance.baseOffset + b.offset, addr, sizeof(x));
+		Memory::Get().Write(instance.basePointer + instance.baseOffset + b.offset, addr, sizeof(x));
 		//make a shadow copy so the current frame sees the change too
 		memcpy(reinterpret_cast<void*>(reinterpret_cast<uint64_t>(instance.block.blockPointer) + instance.baseOffset + b.offset), reinterpret_cast<void*>(addr), sizeof(x));
 	}
@@ -459,7 +467,7 @@ public:
 			return;
 
 		//write the entire class
-		Memory::write(base.basePointer + base.baseOffset, (uint64_t)base.block.blockPointer + base.baseOffset, classInstance::__MDKClassSize);
+		Memory::Get().Write(base.basePointer + base.baseOffset, (uint64_t)base.block.blockPointer + base.baseOffset, classInstance::__MDKClassSize);
 	}
 
 	/**

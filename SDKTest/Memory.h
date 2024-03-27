@@ -1,150 +1,76 @@
-﻿#pragma once
+#pragma once
+
+#include "singleton.h"
 #include <cstdint>
+#include <stdexcept>
 #include <string>
-#include <basetsd.h>
+#include <sys/uio.h>
+#include <vector>
 
-/****************************************************
-*													*
-*	Memory.h - The wrapper class for all the reads	*
-*	This class is used for all the read calls made	*
-*	by the engine. The actual reading logic is in	*
-*	driver.h. This class just calls those functions	*
-*													*
-****************************************************/
-
-/*
-██████╗░██╗░░░░░███████╗░█████╗░░██████╗███████╗  ██████╗░███████╗░█████╗░██████╗░██╗
-██╔══██╗██║░░░░░██╔════╝██╔══██╗██╔════╝██╔════╝  ██╔══██╗██╔════╝██╔══██╗██╔══██╗██║
-██████╔╝██║░░░░░█████╗░░███████║╚█████╗░█████╗░░  ██████╔╝█████╗░░███████║██║░░██║██║
-██╔═══╝░██║░░░░░██╔══╝░░██╔══██║░╚═══██╗██╔══╝░░  ██╔══██╗██╔══╝░░██╔══██║██║░░██║╚═╝
-██║░░░░░███████╗███████╗██║░░██║██████╔╝███████╗  ██║░░██║███████╗██║░░██║██████╔╝██╗
-╚═╝░░░░░╚══════╝╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝  ╚═╝░░╚═╝╚══════╝╚═╝░░╚═╝╚═════╝░╚═╝
-*/
-
-///Core memory class, every function that does any memory operations will use this class.
-///Feel free to add any members here and your own logic. However, this class should be static.
-///Keep in mind that it should be in general enough to just add your logic in driver.h and nothing
-///really here, as this is just a wrapper class. 
-class Memory
+class Memory : public Singleton<Memory>
 {
 public:
-	//enums
-	enum LoadError
-	{
-		noProcessID,
-		noBaseAddress,
-		success
-	};
-
-	enum MemoryStatus
-	{
-		bad,
-		initialized,
-		loaded
-	};
-
-protected:
-	//values that can be shared over more class instances
-	inline static uint64_t baseAddress = 0;
-	inline static int processID = 0;
-
-private:
-
-	//these values have to be set to true once the driver is initilized and basic variables has been set
-	inline static MemoryStatus status = bad;
-
-	//counter for all reads done
-	inline static int totalReads = 0;
-
-	//counter for all writes done
-	inline static int totalWrites = 0;
-
-
+	pid_t pid = 0;
 
 public:
-	//add your initializers here
-	//the initializers should call the init function and set the initOnce bool to true
-	//you should preferably a initializer that needs no additional parameters
-	Memory();
+	// TODO: add GetBaseAddres(), GetPid()
 
-	/**
-	 * \brief REQUIRED! Gets base address and pid from the given process name
-	 * \param processName target process name
-	 * \return LoadError value
-	 */
-	static LoadError load(std::string processName);
-
-	static void checkStatus();
-
-	static MemoryStatus getStatus();
-
-	//process informations
-	static uint64_t getBaseAddress();
-
-	static int getProcessID();
-
-	static int getTotalReads();
-
-	static int getTotalWrites();
-
-
-	/*
-	 * Memory operations here. If you change any params on the templates,
-	 * you have to change them in all the source files too.
-	 * In general you dont have to change them.
-	 */
-
-	 //read function that gets called from the templates
-	static void read(const void* address, void* buffer, DWORD64 size);
-
-
-	static void read(DWORD64 address, DWORD64 buffer, DWORD64 size)
+	bool IsReady()
 	{
-		read(reinterpret_cast<void*>(address), reinterpret_cast<void*>(buffer), size);
+		return pid != 0;
 	}
 
-	template <typename T>
-	static T read(void* address)
+	template<typename T>
+	T Read(uintptr_t address, size_t len = sizeof(T), ssize_t* outBytes = nullptr)
 	{
-		T buffer{};
-		memset(&buffer, 0, sizeof(T));
-		read(address, &buffer, sizeof(T));
+		if (len <= 0) throw std::out_of_range("Len must be greater than 0");
 
-		return buffer;
+		T result;
+		struct iovec local = { &result, len };
+		struct iovec remote = { reinterpret_cast<void*>(address), len };
+
+		ssize_t bytesRead = process_vm_readv(pid, &local, 1, &remote, 1, 0);
+
+		if (bytesRead != static_cast<ssize_t>(len)) throw std::runtime_error("Cannot read memory");
+
+		if (outBytes) *outBytes = bytesRead;
+
+		return result;
 	}
 
-	template <typename T>
-	static T read(uint64_t address)
+	template<typename T>
+	void Read(uintptr_t address, T* buffer, size_t len)
 	{
-		return read<T>(reinterpret_cast<void*>(address));
+		*buffer = Read<T>(address, len);
 	}
 
-
-	//write function that gets called from the templates
-	static void write(void* address, const void* buffer, DWORD64 size);
-
-	static void write(DWORD64 address, DWORD64 buffer, DWORD64 size)
+	template<typename T>
+	void Write(uintptr_t address, T value, size_t len = sizeof(T), ssize_t* outBytes = nullptr)
 	{
-		write(reinterpret_cast<void*>(address), reinterpret_cast<void*>(buffer), size);
+		if (len <= 0) throw std::out_of_range("Len must be greater than 0");
+
+		struct iovec local = { &value, len };
+		struct iovec remote = { reinterpret_cast<void*>(address), len };
+
+		ssize_t bytesWritten = process_vm_writev(pid, &local, 1, &remote, 1, 0);
+
+		if (bytesWritten != static_cast<ssize_t>(len)) throw std::runtime_error("Cannot write memory");
+
+		if (outBytes) *outBytes = bytesWritten;
 	}
 
-	template <typename T>
-	static void write(void* address, T& data)
+	std::string ReadString(uintptr_t address)
 	{
-		write(address, &data, sizeof(T));
+		size_t size = sizeof(std::string);
+		std::vector<char> buffer(size, 0);
+
+		return Read<std::string>(address, size);
 	}
 
-	template <typename T>
-	static void write(uint64_t address, T& data)
+	std::string ReadString(uintptr_t address, size_t size)
 	{
-		write<T>(reinterpret_cast<void*>(address), data);
-	}
+		std::vector<char> buffer(size, 0);
 
-	/**
-	 * \brief pattern scans the text section and returns 0 if unsuccessful
-	 * \param pattern the pattern
-	 * \param mask the mask
-	 * \return the address
-	 */
-	static uint64_t patternScan(const char* pattern, const std::string& mask);
+		return Read<std::string>(address, size);
+	}
 };
