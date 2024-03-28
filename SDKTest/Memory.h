@@ -10,10 +10,18 @@
 #include <sys/uio.h>
 #include <vector>
 
+struct MemoryRegion
+{
+	std::string name;
+	uintptr_t startAddress;
+	uintptr_t endAddress;
+};
+
 class Memory : public Singleton<Memory>
 {
 public:
 	pid_t pid = 0;
+	std::vector<MemoryRegion> regions;
 
 public:
 	bool IsReady()
@@ -43,22 +51,55 @@ public:
 		return pid;
 	}
 
+	size_t GetMemoryRegions()
+	{
+		if (!IsReady()) throw std::runtime_error("Failed to fetch maps for the provided pid");
+
+		std::ifstream mapsFile("/proc/" + std::to_string(pid) + "/maps");
+		if (!mapsFile.is_open()) throw std::runtime_error("Could not open maps file");
+
+		regions.clear();
+
+		std::string line;
+		while (std::getline(mapsFile, line))
+		{
+			MemoryRegion region;
+			if (std::sscanf(line.c_str(), "%lx-%lx %*4s", &region.startAddress, &region.endAddress) != 2) continue;
+
+			size_t pos = line.find_first_of("/[");
+			region.name = pos != std::string::npos ? line.substr(pos) : "[anonymous]";
+
+			regions.push_back(region);
+		}
+
+		mapsFile.close();
+		return regions.size();
+	}
+
 	uintptr_t GetBaseAddress()
 	{
 		if (!IsReady()) return 0x00;
+		if (regions.size() > 0) return regions[0].startAddress;
 
-		std::string mapsPath = "/proc/" + std::to_string(pid) + "/maps";
-
-		std::ifstream mapsFile(mapsPath);
+		std::ifstream mapsFile("/proc/" + std::to_string(pid) + "/maps");
 		if (!mapsFile.is_open()) return 0x00;
 
 		std::string line;
-		if (!std::getline(mapsFile, line)) return 0x00;
+		if (!std::getline(mapsFile, line))
+		{
+			mapsFile.close();
+			return 0x00;
+		}
 
 		uintptr_t address = 0;
 		auto result = std::from_chars(line.data(), line.data() + line.size(), address, 16);
-		if (result.ec != std::errc()) return 0x00;
+		if (result.ec != std::errc())
+		{
+			mapsFile.close();
+			return 0x00;
+		}
 
+		mapsFile.close();
 		return address;
 	}
 
